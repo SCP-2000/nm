@@ -1,12 +1,23 @@
 use axum::{routing::get, Json, Router};
 use futures::stream::TryStreamExt;
 use rtnetlink::packet::nlas::address::Nla as AddrNla;
+use rtnetlink::packet::nlas::link::Nla as LinkNla;
 use rtnetlink::packet::nlas::route::Nla as RouteNla;
-use rtnetlink::packet::AddressMessage;
+use rtnetlink::packet::{AddressMessage, LinkMessage};
 use rtnetlink::packet::{AF_INET, AF_INET6};
 use rtnetlink::{new_connection, packet::RouteMessage, IpVersion};
 use serde::Serialize;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+
+#[derive(Debug, Serialize, Default)]
+struct Link {
+    pub interface_family: u8,
+    pub index: u32,
+    pub link_layer_type: u16,
+    pub flags: u32,
+
+    pub ifname: Option<String>,
+}
 
 #[derive(Debug, Serialize, Default)]
 struct Address {
@@ -52,6 +63,25 @@ fn to_address(family: u8, addr: Vec<u8>) -> IpAddr {
             IpAddr::V6(Ipv6Addr::from(buf))
         }
         _ => unreachable!(),
+    }
+}
+
+impl From<LinkMessage> for Link {
+    fn from(msg: LinkMessage) -> Self {
+        let mut link = Self {
+            interface_family: msg.header.interface_family,
+            index: msg.header.index,
+            link_layer_type: msg.header.link_layer_type,
+            flags: msg.header.flags,
+            ..Default::default()
+        };
+        for nla in msg.nlas {
+            match nla {
+                LinkNla::IfName(ifname) => link.ifname = Some(ifname),
+                nla => log::debug!("ignored unsupported link nla: {:?}", nla),
+            }
+        }
+        link
     }
 }
 
@@ -116,6 +146,20 @@ impl From<RouteMessage> for Route {
     }
 }
 
+async fn links() -> Json<Vec<Link>> {
+    let (connection, handle, _) = new_connection().unwrap();
+    tokio::spawn(connection);
+    let links: Vec<Link> = handle
+        .link()
+        .get()
+        .execute()
+        .map_ok(Link::from)
+        .try_collect()
+        .await
+        .unwrap();
+    Json(links)
+}
+
 async fn addresses() -> Json<Vec<Address>> {
     let (connection, handle, _) = new_connection().unwrap();
     tokio::spawn(connection);
@@ -144,6 +188,7 @@ async fn routes() -> Json<Vec<Route>> {
 #[tokio::main]
 async fn main() -> Result<(), ()> {
     let app = Router::new()
+        .route("/links", get(links))
         .route("/routes", get(routes))
         .route("/addresses", get(addresses));
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
