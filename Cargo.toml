@@ -9,3 +9,4 @@ serde = { version = "1", features = [ "derive" ] }
 tokio = { version = "1", features = [ "macros", "rt-multi-thread" ] }
 rtnetlink = "*"
 futures = "*"
+log = "*"
