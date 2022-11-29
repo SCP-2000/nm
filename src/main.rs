@@ -1,4 +1,3 @@
-use axum::extract::Path;
 use axum::{routing::get, Json, Router};
 use futures::stream::TryStreamExt;
 use rtnetlink::packet::nlas::address::Nla as AddrNla;
@@ -23,7 +22,7 @@ struct Address {
     pub broadcast: Option<IpAddr>,
 }
 
-#[derive(Debug, Serialize, Default)]
+#[derive(Debug, Serialize, Default, Clone)]
 struct Route {
     pub address_family: u8,
     pub destination_prefix_length: u8,
@@ -131,29 +130,21 @@ async fn addresses() -> Json<Vec<Address>> {
     Json(addresses)
 }
 
-async fn routes(Path(af): Path<String>) -> Json<Vec<Route>> {
-    let af = match af.as_str() {
-        "inet" => IpVersion::V4,
-        "inet6" => IpVersion::V6,
-        _ => unreachable!(),
-    };
+async fn routes() -> Json<Vec<Route>> {
     let (connection, handle, _) = new_connection().unwrap();
     tokio::spawn(connection);
-    let routes: Vec<Route> = handle
-        .route()
-        .get(af)
-        .execute()
-        .map_ok(Route::from)
-        .try_collect()
-        .await
-        .unwrap();
+    let v4 = handle.route().get(IpVersion::V4).execute();
+    let v4: Vec<Route> = v4.map_ok(Route::from).try_collect().await.unwrap();
+    let v6 = handle.route().get(IpVersion::V6).execute();
+    let v6: Vec<Route> = v6.map_ok(Route::from).try_collect().await.unwrap();
+    let routes = [v4, v6].concat();
     Json(routes)
 }
 
 #[tokio::main]
 async fn main() -> Result<(), ()> {
     let app = Router::new()
-        .route("/routes/:af", get(routes))
+        .route("/routes", get(routes))
         .route("/addresses", get(addresses));
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     axum::Server::bind(&addr)
