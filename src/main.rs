@@ -1,10 +1,27 @@
 use axum::extract::Path;
 use axum::{routing::get, Json, Router};
 use futures::stream::TryStreamExt;
-use rtnetlink::packet::{nlas::route::Nla, AF_INET, AF_INET6};
+use rtnetlink::packet::nlas::address::Nla as AddrNla;
+use rtnetlink::packet::nlas::route::Nla as RouteNla;
+use rtnetlink::packet::AddressMessage;
+use rtnetlink::packet::{AF_INET, AF_INET6};
 use rtnetlink::{new_connection, packet::RouteMessage, IpVersion};
 use serde::Serialize;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+
+#[derive(Debug, Serialize, Default)]
+struct Address {
+    pub family: u8,
+    pub prefix_len: u8,
+    pub flags: u8,
+    pub scope: u8,
+    pub index: u32,
+
+    pub address: Option<IpAddr>,
+    pub local: Option<IpAddr>,
+    pub label: Option<String>,
+    pub broadcast: Option<IpAddr>,
+}
 
 #[derive(Debug, Serialize, Default)]
 struct Route {
@@ -23,7 +40,7 @@ struct Route {
     pub oif: Option<u32>,
 }
 
-fn address(family: u8, addr: Vec<u8>) -> IpAddr {
+fn to_address(family: u8, addr: Vec<u8>) -> IpAddr {
     match family as u16 {
         AF_INET => {
             let mut buf = [0u8; 4];
@@ -36,6 +53,33 @@ fn address(family: u8, addr: Vec<u8>) -> IpAddr {
             IpAddr::V6(Ipv6Addr::from(buf))
         }
         _ => unreachable!(),
+    }
+}
+
+impl From<AddressMessage> for Address {
+    fn from(msg: AddressMessage) -> Self {
+        let mut address = Self {
+            family: msg.header.family,
+            prefix_len: msg.header.prefix_len,
+            flags: msg.header.flags,
+            scope: msg.header.scope,
+            index: msg.header.index,
+            ..Default::default()
+        };
+        for nla in msg.nlas {
+            match nla {
+                AddrNla::Address(addr) => {
+                    address.address = Some(to_address(msg.header.family, addr))
+                }
+                AddrNla::Local(local) => address.local = Some(to_address(msg.header.family, local)),
+                AddrNla::Label(label) => address.label = Some(label),
+                AddrNla::Broadcast(broadcast) => {
+                    address.broadcast = Some(to_address(msg.header.family, broadcast))
+                }
+                nla => log::debug!("ignored unsupported address nla: {:?}", nla),
+            }
+        }
+        address
     }
 }
 
@@ -54,23 +98,37 @@ impl From<RouteMessage> for Route {
         };
         for nla in msg.nlas {
             match nla {
-                Nla::Destination(dst) => {
-                    route.destination = Some(address(msg.header.address_family, dst));
+                RouteNla::Destination(dst) => {
+                    route.destination = Some(to_address(msg.header.address_family, dst));
                 }
-                Nla::Gateway(gateway) => {
-                    route.gateway = Some(address(msg.header.address_family, gateway));
+                RouteNla::Gateway(gateway) => {
+                    route.gateway = Some(to_address(msg.header.address_family, gateway));
                 }
-                Nla::PrefSource(prefsrc) => {
-                    route.gateway = Some(address(msg.header.address_family, prefsrc));
+                RouteNla::PrefSource(prefsrc) => {
+                    route.gateway = Some(to_address(msg.header.address_family, prefsrc));
                 }
-                Nla::Oif(oif) => {
+                RouteNla::Oif(oif) => {
                     route.oif = Some(oif);
                 }
-                nla => log::debug!("ignored unsupported nla: {:?}", nla),
+                nla => log::debug!("ignored unsupported route nla: {:?}", nla),
             }
         }
         route
     }
+}
+
+async fn addresses() -> Json<Vec<Address>> {
+    let (connection, handle, _) = new_connection().unwrap();
+    tokio::spawn(connection);
+    let addresses: Vec<Address> = handle
+        .address()
+        .get()
+        .execute()
+        .map_ok(Address::from)
+        .try_collect()
+        .await
+        .unwrap();
+    Json(addresses)
 }
 
 async fn routes(Path(af): Path<String>) -> Json<Vec<Route>> {
@@ -94,7 +152,9 @@ async fn routes(Path(af): Path<String>) -> Json<Vec<Route>> {
 
 #[tokio::main]
 async fn main() -> Result<(), ()> {
-    let app = Router::new().route("/routes/:af", get(routes));
+    let app = Router::new()
+        .route("/routes/:af", get(routes))
+        .route("/addresses", get(addresses));
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
