@@ -1,13 +1,9 @@
-use axum::{
-    http::StatusCode,
-    response::IntoResponse,
-    routing::{get, post},
-    Json, Router,
-};
-use futures::{stream::TryStreamExt, StreamExt, TryStream};
+use axum::extract::Path;
+use axum::{routing::get, Json, Router};
+use futures::stream::TryStreamExt;
 use rtnetlink::packet::{nlas::route::Nla, AF_INET, AF_INET6};
-use rtnetlink::{new_connection, packet::RouteMessage, Handle, IpVersion};
-use serde::{Deserialize, Serialize};
+use rtnetlink::{new_connection, packet::RouteMessage, IpVersion};
+use serde::Serialize;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
 #[derive(Debug, Serialize, Default)]
@@ -77,12 +73,17 @@ impl From<RouteMessage> for Route {
     }
 }
 
-async fn routes() -> Json<Vec<Route>> {
+async fn routes(Path(af): Path<String>) -> Json<Vec<Route>> {
+    let af = match af.as_str() {
+        "inet" => IpVersion::V4,
+        "inet6" => IpVersion::V6,
+        _ => unreachable!(),
+    };
     let (connection, handle, _) = new_connection().unwrap();
     tokio::spawn(connection);
     let routes: Vec<Route> = handle
         .route()
-        .get(IpVersion::V4)
+        .get(af)
         .execute()
         .map_ok(Route::from)
         .try_collect()
@@ -93,7 +94,7 @@ async fn routes() -> Json<Vec<Route>> {
 
 #[tokio::main]
 async fn main() -> Result<(), ()> {
-    let app = Router::new().route("/routes", get(routes));
+    let app = Router::new().route("/routes/:af", get(routes));
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
