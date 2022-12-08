@@ -1,4 +1,8 @@
-use axum::{routing::get, Json, Router};
+use axum::{
+    extract::{self, Path},
+    routing::{get, put},
+    Json, Router,
+};
 use futures::stream::TryStreamExt;
 use rtnetlink::packet::nlas::address::Nla as AddrNla;
 use rtnetlink::packet::nlas::link::Nla as LinkNla;
@@ -6,10 +10,10 @@ use rtnetlink::packet::nlas::route::Nla as RouteNla;
 use rtnetlink::packet::{AddressMessage, LinkMessage};
 use rtnetlink::packet::{AF_INET, AF_INET6};
 use rtnetlink::{new_connection, packet::RouteMessage, IpVersion};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
-#[derive(Debug, Serialize, Default)]
+#[derive(Debug, Serialize, Default, Deserialize)]
 struct Link {
     pub interface_family: u8,
     pub index: u32,
@@ -17,6 +21,7 @@ struct Link {
     pub flags: u32,
 
     pub ifname: Option<String>,
+    pub mtu: Option<u32>,
 }
 
 #[derive(Debug, Serialize, Default)]
@@ -78,6 +83,7 @@ impl From<LinkMessage> for Link {
         for nla in msg.nlas {
             match nla {
                 LinkNla::IfName(ifname) => link.ifname = Some(ifname),
+                LinkNla::Mtu(mtu) => link.mtu = Some(mtu),
                 nla => log::debug!("ignored unsupported link nla: {:?}", nla),
             }
         }
@@ -146,6 +152,20 @@ impl From<RouteMessage> for Route {
     }
 }
 
+async fn link(Path(index): Path<u32>, extract::Json(payload): extract::Json<Link>) -> Json<Link> {
+    let (connection, handle, _) = new_connection().unwrap();
+    tokio::spawn(connection);
+    let mut req = handle.link().set(index);
+    if let Some(ref ifname) = payload.ifname {
+        // req = req.name(ifname.clone());
+    }
+    if let Some(mtu) = payload.mtu {
+        req = req.mtu(mtu);
+    }
+    req.execute().await.unwrap();
+    Json(payload)
+}
+
 async fn links() -> Json<Vec<Link>> {
     let (connection, handle, _) = new_connection().unwrap();
     tokio::spawn(connection);
@@ -189,6 +209,7 @@ async fn routes() -> Json<Vec<Route>> {
 async fn main() -> Result<(), ()> {
     let app = Router::new()
         .route("/links", get(links))
+        .route("/links/:index", put(link))
         .route("/routes", get(routes))
         .route("/addresses", get(addresses));
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
