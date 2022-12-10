@@ -1,9 +1,9 @@
 use axum::{
     extract::{self, Path},
-    routing::{get, put},
+    routing::{delete, get, post, put},
     Json, Router,
 };
-use futures::{stream::TryStreamExt, StreamExt};
+use futures::stream::TryStreamExt;
 use rtnetlink::packet::nlas::address::Nla as AddrNla;
 use rtnetlink::packet::nlas::link::Nla as LinkNla;
 use rtnetlink::packet::nlas::route::Nla as RouteNla;
@@ -38,9 +38,11 @@ struct Address {
     pub broadcast: Option<IpAddr>,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct Route {
-    pub table: Option<u32>,
+    pub family: u8,
+    pub table: u8,
+    pub scope: u8,
     pub dst: Option<(IpAddr, u8)>,
     pub src: Option<(IpAddr, u8)>,
     pub gateway: Option<IpAddr>,
@@ -48,6 +50,13 @@ struct Route {
     pub proto: u8,
     pub prefsrc: Option<IpAddr>,
     pub metric: Option<u32>,
+}
+
+fn addr_to_octets(addr: IpAddr) -> Vec<u8> {
+    match addr {
+        IpAddr::V4(addr) => addr.octets().to_vec(),
+        IpAddr::V6(addr) => addr.octets().to_vec(),
+    }
 }
 
 fn octets_to_addr(octets: &[u8]) -> IpAddr {
@@ -127,16 +136,47 @@ impl From<AddressMessage> for Address {
     }
 }
 
+impl Into<RouteMessage> for Route {
+    fn into(self) -> RouteMessage {
+        let mut route = RouteMessage::default();
+        route.header.address_family = self.family;
+        route.header.table = self.table;
+        route.header.scope = self.scope;
+        route.header.protocol = self.proto;
+        if let Some(dst) = self.dst {
+            route.header.destination_prefix_length = dst.1;
+            route
+                .nlas
+                .push(RouteNla::Destination(addr_to_octets(dst.0)));
+        }
+        if let Some(src) = self.src {
+            route.header.source_prefix_length = src.1;
+            route.nlas.push(RouteNla::Source(addr_to_octets(src.0)));
+        }
+        if let Some(gateway) = self.gateway {
+            route.nlas.push(RouteNla::Gateway(addr_to_octets(gateway)));
+        }
+        if let Some(dev) = self.dev {
+            route.nlas.push(RouteNla::Oif(dev));
+        }
+        if let Some(prefsrc) = self.prefsrc {
+            route
+                .nlas
+                .push(RouteNla::PrefSource(addr_to_octets(prefsrc)));
+        }
+        if let Some(metric) = self.metric {
+            route.nlas.push(RouteNla::Priority(metric));
+        }
+        route
+    }
+}
+
 impl From<RouteMessage> for Route {
     fn from(msg: RouteMessage) -> Self {
         Self {
-            table: msg.nlas.iter().find_map(|nla| {
-                if let RouteNla::Table(table) = nla {
-                    Some(*table)
-                } else {
-                    None
-                }
-            }),
+            family: msg.header.address_family,
+            table: msg.header.table,
+            scope: msg.header.scope,
             dst: msg.destination_prefix(),
             src: msg.source_prefix(),
             gateway: msg.gateway(),
@@ -202,20 +242,26 @@ async fn addresses() -> Json<Vec<Address>> {
     Json(addresses)
 }
 
+async fn route_delete(extract::Json(payload): extract::Json<Route>) -> () {
+    let (connection, handle, _) = new_connection().unwrap();
+    tokio::spawn(connection);
+    handle.route().del(payload.into()).execute().await.unwrap();
+}
+
 async fn routes() -> Json<Vec<Route>> {
     let (connection, handle, _) = new_connection().unwrap();
     tokio::spawn(connection);
     let v4 = handle.route().get(IpVersion::V4).execute();
     let v4: Vec<Route> = v4
         .map_ok(Route::from)
-        .try_filter(|route| futures::future::ready(route.table == Some(254)))
+        .try_filter(|route| futures::future::ready(route.table == 254))
         .try_collect()
         .await
         .unwrap();
     let v6 = handle.route().get(IpVersion::V6).execute();
     let v6: Vec<Route> = v6
         .map_ok(Route::from)
-        .try_filter(|route| futures::future::ready(route.table == Some(254)))
+        .try_filter(|route| futures::future::ready(route.table == 254))
         .try_collect()
         .await
         .unwrap();
@@ -228,7 +274,7 @@ async fn main() -> Result<(), ()> {
     let app = Router::new()
         .route("/links", get(links))
         .route("/links/:index", put(link))
-        .route("/routes", get(routes))
+        .route("/routes", get(routes).delete(route_delete))
         .route("/addresses", get(addresses));
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     axum::Server::bind(&addr)
