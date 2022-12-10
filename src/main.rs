@@ -3,7 +3,7 @@ use axum::{
     routing::{get, put},
     Json, Router,
 };
-use futures::stream::TryStreamExt;
+use futures::{stream::TryStreamExt, StreamExt};
 use rtnetlink::packet::nlas::address::Nla as AddrNla;
 use rtnetlink::packet::nlas::link::Nla as LinkNla;
 use rtnetlink::packet::nlas::route::Nla as RouteNla;
@@ -38,21 +38,12 @@ struct Address {
     pub broadcast: Option<IpAddr>,
 }
 
-#[derive(Debug, Serialize, Default, Clone)]
+#[derive(Debug, Serialize, Clone)]
 struct Route {
-    pub address_family: u8,
-    pub destination_prefix_length: u8,
-    pub source_prefix_length: u8,
-    pub tos: u8,
-    pub table: u8,
-    pub protocol: u8,
-    pub scope: u8,
-    pub kind: u8,
-    // TODO: flags
-    pub destination: Option<IpAddr>,
+    pub table: Option<u32>,
+    pub dst: Option<(IpAddr, u8)>,
     pub gateway: Option<IpAddr>,
-    pub prefsrc: Option<IpAddr>,
-    pub oif: Option<u32>,
+    pub dev: Option<u32>,
 }
 
 fn to_address(family: u8, addr: Vec<u8>) -> IpAddr {
@@ -120,35 +111,21 @@ impl From<AddressMessage> for Address {
 
 impl From<RouteMessage> for Route {
     fn from(msg: RouteMessage) -> Self {
-        let mut route = Self {
-            address_family: msg.header.address_family,
-            destination_prefix_length: msg.header.destination_prefix_length,
-            source_prefix_length: msg.header.source_prefix_length,
-            tos: msg.header.tos,
-            table: msg.header.table,
-            protocol: msg.header.protocol,
-            scope: msg.header.scope,
-            kind: msg.header.kind,
-            ..Default::default()
-        };
-        for nla in msg.nlas {
-            match nla {
-                RouteNla::Destination(dst) => {
-                    route.destination = Some(to_address(msg.header.address_family, dst));
+        Self {
+            table: msg.nlas.iter().find_map(|nla| {
+                if let RouteNla::Table(table) = nla {
+                    Some(*table)
+                } else {
+                    None
                 }
-                RouteNla::Gateway(gateway) => {
-                    route.gateway = Some(to_address(msg.header.address_family, gateway));
-                }
-                RouteNla::PrefSource(prefsrc) => {
-                    route.gateway = Some(to_address(msg.header.address_family, prefsrc));
-                }
-                RouteNla::Oif(oif) => {
-                    route.oif = Some(oif);
-                }
-                nla => log::debug!("ignored unsupported route nla: {:?}", nla),
-            }
+            }),
+            dst: msg.destination_prefix(),
+            gateway: msg.gateway(),
+            dev: msg.output_interface(),
+            // TODO: protocol
+            // TODO: prefsrc
+            // TODO: metric
         }
-        route
     }
 }
 
