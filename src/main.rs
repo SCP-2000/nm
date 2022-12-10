@@ -45,6 +45,23 @@ struct Route {
     pub src: Option<(IpAddr, u8)>,
     pub gateway: Option<IpAddr>,
     pub dev: Option<u32>,
+    pub proto: u8,
+    pub prefsrc: Option<IpAddr>,
+    pub metric: Option<u32>,
+}
+
+fn octets_to_addr(octets: &[u8]) -> IpAddr {
+    if octets.len() == 4 {
+        let mut ary: [u8; 4] = Default::default();
+        ary.copy_from_slice(octets);
+        IpAddr::from(ary)
+    } else if octets.len() == 16 {
+        let mut ary: [u8; 16] = Default::default();
+        ary.copy_from_slice(octets);
+        IpAddr::from(ary)
+    } else {
+        unreachable!()
+    }
 }
 
 fn to_address(family: u8, addr: Vec<u8>) -> IpAddr {
@@ -124,9 +141,21 @@ impl From<RouteMessage> for Route {
             src: msg.source_prefix(),
             gateway: msg.gateway(),
             dev: msg.output_interface(),
-            // TODO: protocol
-            // TODO: prefsrc
-            // TODO: metric
+            proto: msg.header.protocol,
+            prefsrc: msg.nlas.iter().find_map(|nla| {
+                if let RouteNla::PrefSource(prefsrc) = nla {
+                    Some(octets_to_addr(prefsrc))
+                } else {
+                    None
+                }
+            }),
+            metric: msg.nlas.iter().find_map(|nla| {
+                if let RouteNla::Priority(metric) = nla {
+                    Some(*metric)
+                } else {
+                    None
+                }
+            }),
         }
     }
 }
