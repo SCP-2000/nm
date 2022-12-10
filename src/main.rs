@@ -1,5 +1,6 @@
 use axum::{
     extract::{self, Path},
+    http::StatusCode,
     routing::{delete, get, post, put},
     Json, Router,
 };
@@ -242,10 +243,17 @@ async fn addresses() -> Json<Vec<Address>> {
     Json(addresses)
 }
 
-async fn route_delete(extract::Json(payload): extract::Json<Route>) -> () {
+async fn route_delete(
+    extract::Json(payload): extract::Json<Route>,
+) -> Result<(), (StatusCode, String)> {
     let (connection, handle, _) = new_connection().unwrap();
     tokio::spawn(connection);
-    handle.route().del(payload.into()).execute().await.unwrap();
+    handle
+        .route()
+        .del(payload.into())
+        .execute()
+        .await
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))
 }
 
 async fn routes() -> Json<Vec<Route>> {
