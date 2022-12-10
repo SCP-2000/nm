@@ -42,6 +42,7 @@ struct Address {
 struct Route {
     pub table: Option<u32>,
     pub dst: Option<(IpAddr, u8)>,
+    pub src: Option<(IpAddr, u8)>,
     pub gateway: Option<IpAddr>,
     pub dev: Option<u32>,
 }
@@ -120,6 +121,7 @@ impl From<RouteMessage> for Route {
                 }
             }),
             dst: msg.destination_prefix(),
+            src: msg.source_prefix(),
             gateway: msg.gateway(),
             dev: msg.output_interface(),
             // TODO: protocol
