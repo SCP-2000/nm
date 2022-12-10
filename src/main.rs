@@ -206,9 +206,19 @@ async fn routes() -> Json<Vec<Route>> {
     let (connection, handle, _) = new_connection().unwrap();
     tokio::spawn(connection);
     let v4 = handle.route().get(IpVersion::V4).execute();
-    let v4: Vec<Route> = v4.map_ok(Route::from).try_collect().await.unwrap();
+    let v4: Vec<Route> = v4
+        .map_ok(Route::from)
+        .try_filter(|route| futures::future::ready(route.table == Some(254)))
+        .try_collect()
+        .await
+        .unwrap();
     let v6 = handle.route().get(IpVersion::V6).execute();
-    let v6: Vec<Route> = v6.map_ok(Route::from).try_collect().await.unwrap();
+    let v6: Vec<Route> = v6
+        .map_ok(Route::from)
+        .try_filter(|route| futures::future::ready(route.table == Some(254)))
+        .try_collect()
+        .await
+        .unwrap();
     let routes = [v4, v6].concat();
     Json(routes)
 }
