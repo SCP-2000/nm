@@ -2,15 +2,15 @@ use axum::{
     extract::{self, Path},
     http::StatusCode,
     routing::{delete, get, post, put},
-    Json, Router,
+    Extension, Json, Router,
 };
 use futures::stream::TryStreamExt;
-use rtnetlink::packet::nlas::address::Nla as AddrNla;
 use rtnetlink::packet::nlas::link::Nla as LinkNla;
 use rtnetlink::packet::nlas::route::Nla as RouteNla;
 use rtnetlink::packet::{AddressMessage, LinkMessage};
 use rtnetlink::packet::{AF_INET, AF_INET6};
-use rtnetlink::{new_connection, packet::RouteMessage, IpVersion};
+use rtnetlink::{packet::nlas::address::Nla as AddrNla, Handle};
+use rtnetlink::{packet::RouteMessage, IpVersion};
 use serde::{Deserialize, Serialize};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
@@ -201,9 +201,11 @@ impl From<RouteMessage> for Route {
     }
 }
 
-async fn link(Path(index): Path<u32>, extract::Json(payload): extract::Json<Link>) -> Json<Link> {
-    let (connection, handle, _) = new_connection().unwrap();
-    tokio::spawn(connection);
+async fn link(
+    Extension(handle): Extension<Handle>,
+    Path(index): Path<u32>,
+    extract::Json(payload): extract::Json<Link>,
+) -> Json<Link> {
     let mut req = handle.link().set(index);
     if let Some(ref ifname) = payload.ifname {
         // req = req.name(ifname.clone());
@@ -215,9 +217,7 @@ async fn link(Path(index): Path<u32>, extract::Json(payload): extract::Json<Link
     Json(payload)
 }
 
-async fn links() -> Json<Vec<Link>> {
-    let (connection, handle, _) = new_connection().unwrap();
-    tokio::spawn(connection);
+async fn links(Extension(handle): Extension<Handle>) -> Json<Vec<Link>> {
     let links: Vec<Link> = handle
         .link()
         .get()
@@ -229,9 +229,7 @@ async fn links() -> Json<Vec<Link>> {
     Json(links)
 }
 
-async fn addresses() -> Json<Vec<Address>> {
-    let (connection, handle, _) = new_connection().unwrap();
-    tokio::spawn(connection);
+async fn addresses(Extension(handle): Extension<Handle>) -> Json<Vec<Address>> {
     let addresses: Vec<Address> = handle
         .address()
         .get()
@@ -244,10 +242,9 @@ async fn addresses() -> Json<Vec<Address>> {
 }
 
 async fn route_delete(
+    Extension(handle): Extension<Handle>,
     extract::Json(payload): extract::Json<Route>,
 ) -> Result<(), (StatusCode, String)> {
-    let (connection, handle, _) = new_connection().unwrap();
-    tokio::spawn(connection);
     handle
         .route()
         .del(payload.into())
@@ -256,9 +253,7 @@ async fn route_delete(
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))
 }
 
-async fn routes() -> Json<Vec<Route>> {
-    let (connection, handle, _) = new_connection().unwrap();
-    tokio::spawn(connection);
+async fn routes(Extension(handle): Extension<Handle>) -> Json<Vec<Route>> {
     let v4 = handle.route().get(IpVersion::V4).execute();
     let v4: Vec<Route> = v4
         .map_ok(Route::from)
@@ -283,7 +278,9 @@ async fn main() -> Result<(), ()> {
         .route("/links", get(links))
         .route("/links/:index", put(link))
         .route("/routes", get(routes).delete(route_delete))
-        .route("/addresses", get(addresses));
+        .route("/addresses", get(addresses))
+        .route_layer(axum::middleware::from_fn(nm::netlink));
+
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
