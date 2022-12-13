@@ -8,7 +8,12 @@ use std::net::SocketAddr;
 #[tokio::main]
 async fn main() -> Result<(), ()> {
     let app = Router::new()
-        .route("/links", get(nm::link::get))
+        .route(
+            "/link",
+            get(nm::link::get)
+                .delete(nm::link::delete)
+                .post(nm::link::add),
+        )
         .route("/links/:index", put(nm::link::change))
         .route(
             "/route",

@@ -77,6 +77,26 @@ pub async fn change(
     Json(payload)
 }
 
+pub async fn add(
+    Extension(handle): Extension<Handle>,
+    extract::Json(payload): extract::Json<Link>,
+) -> Result<(), Error> {
+    let mut req = handle.link().add();
+    req.message_mut().header.interface_family = payload.family;
+    req.message_mut().header.index = payload.index;
+    req.message_mut().header.link_layer_type = payload.linklayer;
+    req.message_mut().header.flags = payload.flags;
+    push_nlas(&payload, &mut req.message_mut().nlas);
+    Ok(req.execute().await?)
+}
+
+pub async fn delete(
+    Extension(handle): Extension<Handle>,
+    extract::Json(payload): extract::Json<Link>,
+) -> Result<(), Error> {
+    Ok(handle.link().del(payload.index).execute().await?)
+}
+
 pub async fn get(Extension(handle): Extension<Handle>) -> Result<Json<Vec<Link>>, Error> {
     let links: Vec<Link> = handle
         .link()
