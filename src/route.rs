@@ -1,5 +1,6 @@
 use crate::util::{addr_to_octets, octets_to_addr};
-use axum::{extract, http::StatusCode, Extension, Json};
+use crate::Error;
+use axum::{extract, Extension, Json};
 use futures::stream::TryStreamExt;
 use rtnetlink::packet::nlas::route::Nla;
 use rtnetlink::packet::{AF_INET, AF_INET6};
@@ -96,7 +97,7 @@ impl From<RouteMessage> for Route {
 pub async fn add(
     Extension(handle): Extension<Handle>,
     extract::Json(payload): extract::Json<Route>,
-) -> Result<(), (StatusCode, String)> {
+) -> Result<(), Error> {
     let mut req = handle.route().add();
     req = req.table(payload.table);
     req = req.scope(payload.scope);
@@ -108,43 +109,25 @@ pub async fn add(
     if let Some(src) = payload.src {
         req.message_mut().header.source_prefix_length = src.1;
     }
-    let res = match payload.family as u16 {
+    Ok(match payload.family as u16 {
         AF_INET => req.v4().execute().await,
         AF_INET6 => req.v6().execute().await,
         _ => unreachable!(),
-    };
-    res.map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))
+    }?)
 }
 
 pub async fn delete(
     Extension(handle): Extension<Handle>,
     extract::Json(payload): extract::Json<Route>,
-) -> Result<(), (StatusCode, String)> {
-    handle
-        .route()
-        .del(payload.into())
-        .execute()
-        .await
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))
+) -> Result<(), Error> {
+    Ok(handle.route().del(payload.into()).execute().await?)
 }
 
-pub async fn get(
-    Extension(handle): Extension<Handle>,
-) -> Result<Json<Vec<Route>>, (StatusCode, String)> {
+pub async fn get(Extension(handle): Extension<Handle>) -> Result<Json<Vec<Route>>, Error> {
     let v4 = handle.route().get(IpVersion::V4).execute();
-    let v4: Vec<Route> = v4
-        .map_ok(Route::from)
-        .try_filter(|route| futures::future::ready(route.table == 254))
-        .try_collect()
-        .await
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+    let v4: Vec<Route> = v4.map_ok(Route::from).try_collect().await?;
     let v6 = handle.route().get(IpVersion::V6).execute();
-    let v6: Vec<Route> = v6
-        .map_ok(Route::from)
-        .try_filter(|route| futures::future::ready(route.table == 254))
-        .try_collect()
-        .await
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+    let v6: Vec<Route> = v6.map_ok(Route::from).try_collect().await?;
     let routes = [v4, v6].concat();
     Ok(Json(routes))
 }
