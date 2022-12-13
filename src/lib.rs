@@ -4,6 +4,8 @@ use axum::{
     response::Response,
 };
 
+pub mod route;
+
 pub async fn netlink<B>(
     mut req: Request<B>,
     next: Next<B>,
