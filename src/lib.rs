@@ -28,7 +28,7 @@ pub async fn netlink<B>(
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("netlink error")]
+    #[error("netlink error: {0}")]
     Netlink(#[from] rtnetlink::Error),
 }
 
