@@ -8,10 +8,10 @@ use futures::stream::TryStreamExt;
 use rtnetlink::packet::nlas::route::Nla as RouteNla;
 
 use rtnetlink::packet::{AF_INET, AF_INET6};
-use rtnetlink::{Handle};
+use rtnetlink::Handle;
 use rtnetlink::{packet::RouteMessage, IpVersion};
 use serde::{Deserialize, Serialize};
-use std::net::{IpAddr};
+use std::net::IpAddr;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Route {

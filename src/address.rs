@@ -1,14 +1,11 @@
-use axum::{
-    Extension, Json,
-};
+use axum::{Extension, Json};
 use futures::stream::TryStreamExt;
 
-
-use rtnetlink::packet::{AddressMessage};
+use rtnetlink::packet::AddressMessage;
 use rtnetlink::packet::{AF_INET, AF_INET6};
 use rtnetlink::{packet::nlas::address::Nla as AddrNla, Handle};
 
-use serde::{Serialize};
+use serde::Serialize;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 #[derive(Debug, Serialize, Default)]
@@ -23,27 +20,6 @@ pub struct Address {
     pub local: Option<IpAddr>,
     pub label: Option<String>,
     pub broadcast: Option<IpAddr>,
-}
-
-fn addr_to_octets(addr: IpAddr) -> Vec<u8> {
-    match addr {
-        IpAddr::V4(addr) => addr.octets().to_vec(),
-        IpAddr::V6(addr) => addr.octets().to_vec(),
-    }
-}
-
-fn octets_to_addr(octets: &[u8]) -> IpAddr {
-    if octets.len() == 4 {
-        let mut ary: [u8; 4] = Default::default();
-        ary.copy_from_slice(octets);
-        IpAddr::from(ary)
-    } else if octets.len() == 16 {
-        let mut ary: [u8; 16] = Default::default();
-        ary.copy_from_slice(octets);
-        IpAddr::from(ary)
-    } else {
-        unreachable!()
-    }
 }
 
 fn to_address(family: u8, addr: Vec<u8>) -> IpAddr {

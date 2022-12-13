@@ -1,18 +1,9 @@
 use axum::{
-    routing::{get, put}, Router,
+    routing::{get, put},
+    Router,
 };
 
-
-
-
-
-
-
-
-
-
-use std::net::{SocketAddr};
-
+use std::net::SocketAddr;
 
 #[tokio::main]
 async fn main() -> Result<(), ()> {

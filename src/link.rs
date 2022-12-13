@@ -5,12 +5,11 @@ use axum::{
 use futures::stream::TryStreamExt;
 use rtnetlink::packet::nlas::link::Nla as LinkNla;
 
-use rtnetlink::packet::{LinkMessage};
+use rtnetlink::packet::LinkMessage;
 
-use rtnetlink::{Handle};
+use rtnetlink::Handle;
 
 use serde::{Deserialize, Serialize};
-
 
 #[derive(Debug, Serialize, Default, Deserialize)]
 pub struct Link {
