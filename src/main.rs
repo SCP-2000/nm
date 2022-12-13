@@ -11,12 +11,17 @@ async fn main() -> Result<(), ()> {
         .route("/links", get(nm::link::get))
         .route("/links/:index", put(nm::link::change))
         .route(
-            "/routes",
+            "/route",
             get(nm::route::get)
                 .delete(nm::route::delete)
                 .post(nm::route::add),
         )
-        .route("/addresses", get(nm::address::get))
+        .route(
+            "/address",
+            get(nm::address::get)
+                .delete(nm::address::delete)
+                .post(nm::address::add),
+        )
         .route_layer(axum::middleware::from_fn(nm::netlink));
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
