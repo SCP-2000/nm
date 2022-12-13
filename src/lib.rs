@@ -1,8 +1,9 @@
 use axum::{
     http::{Request, StatusCode},
     middleware::Next,
-    response::Response,
+    response::{IntoResponse, Response},
 };
+use thiserror::Error;
 
 pub mod address;
 pub mod link;
@@ -22,5 +23,17 @@ pub async fn netlink<B>(
             StatusCode::INTERNAL_SERVER_ERROR,
             "failed to get netlink handle",
         ))
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("netlink error")]
+    Netlink(#[from] rtnetlink::Error),
+}
+
+impl IntoResponse for Error {
+    fn into_response(self) -> Response {
+        (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()).into_response()
     }
 }
