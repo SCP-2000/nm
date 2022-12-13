@@ -5,6 +5,8 @@ use axum::{
     Extension, Json, Router,
 };
 use futures::stream::TryStreamExt;
+use nm::link::Link;
+use nm::route::Route;
 use rtnetlink::packet::nlas::link::Nla as LinkNla;
 use rtnetlink::packet::nlas::route::Nla as RouteNla;
 use rtnetlink::packet::{AddressMessage, LinkMessage};
@@ -13,18 +15,6 @@ use rtnetlink::{packet::nlas::address::Nla as AddrNla, Handle};
 use rtnetlink::{packet::RouteMessage, IpVersion};
 use serde::{Deserialize, Serialize};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
-use nm::route::Route;
-
-#[derive(Debug, Serialize, Default, Deserialize)]
-struct Link {
-    pub interface_family: u8,
-    pub index: u32,
-    pub link_layer_type: u16,
-    pub flags: u32,
-
-    pub ifname: Option<String>,
-    pub mtu: Option<u32>,
-}
 
 #[derive(Debug, Serialize, Default)]
 struct Address {
@@ -77,26 +67,6 @@ fn to_address(family: u8, addr: Vec<u8>) -> IpAddr {
     }
 }
 
-impl From<LinkMessage> for Link {
-    fn from(msg: LinkMessage) -> Self {
-        let mut link = Self {
-            interface_family: msg.header.interface_family,
-            index: msg.header.index,
-            link_layer_type: msg.header.link_layer_type,
-            flags: msg.header.flags,
-            ..Default::default()
-        };
-        for nla in msg.nlas {
-            match nla {
-                LinkNla::IfName(ifname) => link.ifname = Some(ifname),
-                LinkNla::Mtu(mtu) => link.mtu = Some(mtu),
-                nla => log::debug!("ignored unsupported link nla: {:?}", nla),
-            }
-        }
-        link
-    }
-}
-
 impl From<AddressMessage> for Address {
     fn from(msg: AddressMessage) -> Self {
         let mut address = Self {
@@ -124,34 +94,6 @@ impl From<AddressMessage> for Address {
     }
 }
 
-async fn link(
-    Extension(handle): Extension<Handle>,
-    Path(index): Path<u32>,
-    extract::Json(payload): extract::Json<Link>,
-) -> Json<Link> {
-    let mut req = handle.link().set(index);
-    if let Some(ref ifname) = payload.ifname {
-        // req = req.name(ifname.clone());
-    }
-    if let Some(mtu) = payload.mtu {
-        req = req.mtu(mtu);
-    }
-    req.execute().await.unwrap();
-    Json(payload)
-}
-
-async fn links(Extension(handle): Extension<Handle>) -> Json<Vec<Link>> {
-    let links: Vec<Link> = handle
-        .link()
-        .get()
-        .execute()
-        .map_ok(Link::from)
-        .try_collect()
-        .await
-        .unwrap();
-    Json(links)
-}
-
 async fn addresses(Extension(handle): Extension<Handle>) -> Json<Vec<Address>> {
     let addresses: Vec<Address> = handle
         .address()
@@ -167,8 +109,8 @@ async fn addresses(Extension(handle): Extension<Handle>) -> Json<Vec<Address>> {
 #[tokio::main]
 async fn main() -> Result<(), ()> {
     let app = Router::new()
-        .route("/links", get(links))
-        .route("/links/:index", put(link))
+        .route("/links", get(nm::link::get))
+        .route("/links/:index", put(nm::link::change))
         .route(
             "/routes",
             get(nm::route::get)
