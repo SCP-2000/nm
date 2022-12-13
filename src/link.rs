@@ -4,10 +4,49 @@ use axum::{
     Extension, Json,
 };
 use futures::stream::TryStreamExt;
-use rtnetlink::packet::nlas::link::Nla;
+use rtnetlink::packet::nlas::link::{Info, InfoKind, Nla};
 use rtnetlink::packet::LinkMessage;
 use rtnetlink::Handle;
 use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum Kind {
+    Dummy,
+    Ifb,
+    Bridge,
+    Tun,
+    Vrf,
+    Wireguard,
+    Other,
+}
+
+impl From<InfoKind> for Kind {
+    fn from(kind: InfoKind) -> Self {
+        match kind {
+            InfoKind::Dummy => Self::Dummy,
+            InfoKind::Ifb => Self::Ifb,
+            InfoKind::Bridge => Self::Bridge,
+            InfoKind::Tun => Self::Tun,
+            InfoKind::Vrf => Self::Vrf,
+            InfoKind::Wireguard => Self::Wireguard,
+            _ => Self::Other,
+        }
+    }
+}
+
+impl From<&Kind> for InfoKind {
+    fn from(kind: &Kind) -> Self {
+        match kind {
+            Kind::Dummy => InfoKind::Dummy,
+            Kind::Ifb => InfoKind::Ifb,
+            Kind::Bridge => InfoKind::Bridge,
+            Kind::Tun => InfoKind::Tun,
+            Kind::Vrf => InfoKind::Vrf,
+            Kind::Wireguard => InfoKind::Wireguard,
+            _ => unimplemented!(),
+        }
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Link {
@@ -18,6 +57,7 @@ pub struct Link {
 
     pub ifname: Option<String>,
     pub mtu: Option<u32>,
+    pub kind: Option<Kind>,
 }
 
 fn push_nlas(link: &Link, nlas: &mut Vec<Nla>) {
@@ -26,6 +66,9 @@ fn push_nlas(link: &Link, nlas: &mut Vec<Nla>) {
     }
     if let Some(mtu) = link.mtu {
         nlas.push(Nla::Mtu(mtu));
+    }
+    if let Some(kind) = &link.kind {
+        nlas.push(Nla::Info(vec![Info::Kind(kind.into())]));
     }
 }
 
@@ -54,6 +97,14 @@ impl From<LinkMessage> for Link {
             match nla {
                 Nla::IfName(ifname) => link.ifname = Some(ifname),
                 Nla::Mtu(mtu) => link.mtu = Some(mtu),
+                Nla::Info(info) => {
+                    for i in info {
+                        match i {
+                            Info::Kind(kind) => link.kind = Some(kind.into()),
+                            _ => continue,
+                        }
+                    }
+                }
                 _ => continue,
             }
         }
