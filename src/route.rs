@@ -128,21 +128,23 @@ pub async fn delete(
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))
 }
 
-pub async fn get(Extension(handle): Extension<Handle>) -> Json<Vec<Route>> {
+pub async fn get(
+    Extension(handle): Extension<Handle>,
+) -> Result<Json<Vec<Route>>, (StatusCode, String)> {
     let v4 = handle.route().get(IpVersion::V4).execute();
     let v4: Vec<Route> = v4
         .map_ok(Route::from)
         .try_filter(|route| futures::future::ready(route.table == 254))
         .try_collect()
         .await
-        .unwrap();
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
     let v6 = handle.route().get(IpVersion::V6).execute();
     let v6: Vec<Route> = v6
         .map_ok(Route::from)
         .try_filter(|route| futures::future::ready(route.table == 254))
         .try_collect()
         .await
-        .unwrap();
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
     let routes = [v4, v6].concat();
-    Json(routes)
+    Ok(Json(routes))
 }
