@@ -1,12 +1,12 @@
-use crate::util::octets_to_addr;
+use crate::util::{addr_to_octets, octets_to_addr};
 use axum::{Extension, Json};
 use futures::stream::TryStreamExt;
 use rtnetlink::packet::AddressMessage;
-use rtnetlink::{packet::nlas::address::Nla as AddrNla, Handle};
-use serde::Serialize;
+use rtnetlink::{packet::nlas::address::Nla, Handle};
+use serde::{Deserialize, Serialize};
 use std::net::IpAddr;
 
-#[derive(Debug, Serialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Address {
     pub family: u8,
     pub plen: u8,
@@ -18,6 +18,34 @@ pub struct Address {
     pub local: Option<IpAddr>,
     pub label: Option<String>,
     pub broadcast: Option<IpAddr>,
+}
+
+fn push_nlas(addr: &Address, nlas: &mut Vec<Nla>) {
+    if let Some(address) = addr.address {
+        nlas.push(Nla::Address(addr_to_octets(address)));
+    }
+    if let Some(local) = addr.address {
+        nlas.push(Nla::Local(addr_to_octets(local)));
+    }
+    if let Some(label) = &addr.label {
+        nlas.push(Nla::Label(label.to_string()));
+    }
+    if let Some(broadcast) = addr.broadcast {
+        nlas.push(Nla::Broadcast(addr_to_octets(broadcast)));
+    }
+}
+
+impl From<Address> for AddressMessage {
+    fn from(addr: Address) -> Self {
+        let mut msg = Self::default();
+        msg.header.family = addr.family;
+        msg.header.prefix_len = addr.plen;
+        msg.header.flags = addr.flags;
+        msg.header.scope = addr.scope;
+        msg.header.index = addr.index;
+        push_nlas(&addr, &mut msg.nlas);
+        msg
+    }
 }
 
 impl From<AddressMessage> for Address {
@@ -32,13 +60,11 @@ impl From<AddressMessage> for Address {
         };
         for nla in msg.nlas {
             match nla {
-                AddrNla::Address(addr) => address.address = Some(octets_to_addr(&addr)),
-                AddrNla::Local(local) => address.local = Some(octets_to_addr(&local)),
-                AddrNla::Label(label) => address.label = Some(label),
-                AddrNla::Broadcast(broadcast) => {
-                    address.broadcast = Some(octets_to_addr(&broadcast))
-                }
-                nla => log::debug!("ignored unsupported address nla: {:?}", nla),
+                Nla::Address(addr) => address.address = Some(octets_to_addr(&addr)),
+                Nla::Local(local) => address.local = Some(octets_to_addr(&local)),
+                Nla::Label(label) => address.label = Some(label),
+                Nla::Broadcast(broadcast) => address.broadcast = Some(octets_to_addr(&broadcast)),
+                _ => continue,
             }
         }
         address
