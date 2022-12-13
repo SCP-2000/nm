@@ -6,6 +6,7 @@ use axum::{
 
 pub mod link;
 pub mod route;
+pub mod address;
 
 pub async fn netlink<B>(
     mut req: Request<B>,
