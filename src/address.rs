@@ -1,17 +1,15 @@
 use axum::{
-    extract::{self, Path},
-    http::StatusCode,
-    Extension, Json, Router,
+    Extension, Json,
 };
 use futures::stream::TryStreamExt;
-use rtnetlink::packet::nlas::link::Nla as LinkNla;
-use rtnetlink::packet::nlas::route::Nla as RouteNla;
-use rtnetlink::packet::{AddressMessage, LinkMessage};
+
+
+use rtnetlink::packet::{AddressMessage};
 use rtnetlink::packet::{AF_INET, AF_INET6};
 use rtnetlink::{packet::nlas::address::Nla as AddrNla, Handle};
-use rtnetlink::{packet::RouteMessage, IpVersion};
-use serde::{Deserialize, Serialize};
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+
+use serde::{Serialize};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 #[derive(Debug, Serialize, Default)]
 pub struct Address {

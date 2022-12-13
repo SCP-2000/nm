@@ -1,17 +1,16 @@
 use axum::{
     extract::{self, Path},
-    http::StatusCode,
-    Extension, Json, Router,
+    Extension, Json,
 };
 use futures::stream::TryStreamExt;
 use rtnetlink::packet::nlas::link::Nla as LinkNla;
-use rtnetlink::packet::nlas::route::Nla as RouteNla;
-use rtnetlink::packet::{AddressMessage, LinkMessage};
-use rtnetlink::packet::{AF_INET, AF_INET6};
-use rtnetlink::{packet::nlas::address::Nla as AddrNla, Handle};
-use rtnetlink::{packet::RouteMessage, IpVersion};
+
+use rtnetlink::packet::{LinkMessage};
+
+use rtnetlink::{Handle};
+
 use serde::{Deserialize, Serialize};
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+
 
 #[derive(Debug, Serialize, Default, Deserialize)]
 pub struct Link {
@@ -50,7 +49,7 @@ pub async fn change(
     extract::Json(payload): extract::Json<Link>,
 ) -> Json<Link> {
     let mut req = handle.link().set(index);
-    if let Some(ref ifname) = payload.ifname {
+    if let Some(ref _ifname) = payload.ifname {
         // req = req.name(ifname.clone());
     }
     if let Some(mtu) = payload.mtu {
