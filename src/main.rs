@@ -241,6 +241,50 @@ async fn addresses(Extension(handle): Extension<Handle>) -> Json<Vec<Address>> {
     Json(addresses)
 }
 
+async fn route_add(
+    Extension(handle): Extension<Handle>,
+    extract::Json(payload): extract::Json<Route>,
+) -> Result<(), (StatusCode, String)> {
+    let mut req = handle.route().add();
+    req = req.table(payload.table);
+    req = req.scope(payload.scope);
+    req = req.protocol(payload.proto);
+    if let Some(dst) = payload.dst {
+        req.message_mut().header.destination_prefix_length = dst.1;
+        req.message_mut()
+            .nlas
+            .push(RouteNla::Destination(addr_to_octets(dst.0)));
+    }
+    if let Some(src) = payload.src {
+        req.message_mut().header.source_prefix_length = src.1;
+        req.message_mut()
+            .nlas
+            .push(RouteNla::Source(addr_to_octets(src.0)));
+    }
+    if let Some(gateway) = payload.gateway {
+        req.message_mut()
+            .nlas
+            .push(RouteNla::Gateway(addr_to_octets(gateway)));
+    }
+    if let Some(dev) = payload.dev {
+        req.message_mut().nlas.push(RouteNla::Oif(dev));
+    }
+    if let Some(prefsrc) = payload.prefsrc {
+        req.message_mut()
+            .nlas
+            .push(RouteNla::PrefSource(addr_to_octets(prefsrc)));
+    }
+    if let Some(metric) = payload.metric {
+        req.message_mut().nlas.push(RouteNla::Priority(metric));
+    }
+    let res = match payload.family as u16 {
+        AF_INET => req.v4().execute().await,
+        AF_INET6 => req.v6().execute().await,
+        _ => unreachable!(),
+    };
+    res.map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))
+}
+
 async fn route_delete(
     Extension(handle): Extension<Handle>,
     extract::Json(payload): extract::Json<Route>,
@@ -277,7 +321,7 @@ async fn main() -> Result<(), ()> {
     let app = Router::new()
         .route("/links", get(links))
         .route("/links/:index", put(link))
-        .route("/routes", get(routes).delete(route_delete))
+        .route("/routes", get(routes).delete(route_delete).post(route_add))
         .route("/addresses", get(addresses))
         .route_layer(axum::middleware::from_fn(nm::netlink));
 
