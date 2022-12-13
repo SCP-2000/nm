@@ -46,21 +46,21 @@ fn push_nlas(route: &Route, nlas: &mut Vec<Nla>) {
     }
 }
 
-impl Into<RouteMessage> for Route {
-    fn into(self) -> RouteMessage {
-        let mut route = RouteMessage::default();
-        route.header.address_family = self.family;
-        route.header.table = self.table;
-        route.header.scope = self.scope;
-        route.header.protocol = self.proto;
-        push_nlas(&self, &mut route.nlas);
-        if let Some(dst) = self.dst {
-            route.header.destination_prefix_length = dst.1;
+impl From<Route> for RouteMessage {
+    fn from(route: Route) -> Self {
+        let mut msg = Self::default();
+        msg.header.address_family = route.family;
+        msg.header.table = route.table;
+        msg.header.scope = route.scope;
+        msg.header.protocol = route.proto;
+        push_nlas(&route, &mut msg.nlas);
+        if let Some(dst) = route.dst {
+            msg.header.destination_prefix_length = dst.1;
         }
-        if let Some(src) = self.src {
-            route.header.source_prefix_length = src.1;
+        if let Some(src) = route.src {
+            msg.header.source_prefix_length = src.1;
         }
-        route
+        msg
     }
 }
 
