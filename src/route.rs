@@ -1,12 +1,6 @@
-use axum::{
-    extract::{self},
-    http::StatusCode,
-    Extension, Json,
-};
+use axum::{extract, http::StatusCode, Extension, Json};
 use futures::stream::TryStreamExt;
-
-use rtnetlink::packet::nlas::route::Nla as RouteNla;
-
+use rtnetlink::packet::nlas::route::Nla;
 use rtnetlink::packet::{AF_INET, AF_INET6};
 use rtnetlink::Handle;
 use rtnetlink::{packet::RouteMessage, IpVersion};
@@ -48,6 +42,27 @@ fn octets_to_addr(octets: &[u8]) -> IpAddr {
     }
 }
 
+fn push_nlas(route: &Route, nlas: &mut Vec<Nla>) {
+    if let Some(dst) = route.dst {
+        nlas.push(Nla::Destination(addr_to_octets(dst.0)));
+    }
+    if let Some(src) = route.src {
+        nlas.push(Nla::Source(addr_to_octets(src.0)));
+    }
+    if let Some(gateway) = route.gateway {
+        nlas.push(Nla::Gateway(addr_to_octets(gateway)));
+    }
+    if let Some(dev) = route.dev {
+        nlas.push(Nla::Oif(dev));
+    }
+    if let Some(prefsrc) = route.prefsrc {
+        nlas.push(Nla::PrefSource(addr_to_octets(prefsrc)));
+    }
+    if let Some(metric) = route.metric {
+        nlas.push(Nla::Priority(metric));
+    }
+}
+
 impl Into<RouteMessage> for Route {
     fn into(self) -> RouteMessage {
         let mut route = RouteMessage::default();
@@ -55,29 +70,12 @@ impl Into<RouteMessage> for Route {
         route.header.table = self.table;
         route.header.scope = self.scope;
         route.header.protocol = self.proto;
+        push_nlas(&self, &mut route.nlas);
         if let Some(dst) = self.dst {
             route.header.destination_prefix_length = dst.1;
-            route
-                .nlas
-                .push(RouteNla::Destination(addr_to_octets(dst.0)));
         }
         if let Some(src) = self.src {
             route.header.source_prefix_length = src.1;
-            route.nlas.push(RouteNla::Source(addr_to_octets(src.0)));
-        }
-        if let Some(gateway) = self.gateway {
-            route.nlas.push(RouteNla::Gateway(addr_to_octets(gateway)));
-        }
-        if let Some(dev) = self.dev {
-            route.nlas.push(RouteNla::Oif(dev));
-        }
-        if let Some(prefsrc) = self.prefsrc {
-            route
-                .nlas
-                .push(RouteNla::PrefSource(addr_to_octets(prefsrc)));
-        }
-        if let Some(metric) = self.metric {
-            route.nlas.push(RouteNla::Priority(metric));
         }
         route
     }
@@ -95,14 +93,14 @@ impl From<RouteMessage> for Route {
             dev: msg.output_interface(),
             proto: msg.header.protocol,
             prefsrc: msg.nlas.iter().find_map(|nla| {
-                if let RouteNla::PrefSource(prefsrc) = nla {
+                if let Nla::PrefSource(prefsrc) = nla {
                     Some(octets_to_addr(prefsrc))
                 } else {
                     None
                 }
             }),
             metric: msg.nlas.iter().find_map(|nla| {
-                if let RouteNla::Priority(metric) = nla {
+                if let Nla::Priority(metric) = nla {
                     Some(*metric)
                 } else {
                     None
@@ -120,33 +118,12 @@ pub async fn add(
     req = req.table(payload.table);
     req = req.scope(payload.scope);
     req = req.protocol(payload.proto);
+    push_nlas(&payload, &mut req.message_mut().nlas);
     if let Some(dst) = payload.dst {
         req.message_mut().header.destination_prefix_length = dst.1;
-        req.message_mut()
-            .nlas
-            .push(RouteNla::Destination(addr_to_octets(dst.0)));
     }
     if let Some(src) = payload.src {
         req.message_mut().header.source_prefix_length = src.1;
-        req.message_mut()
-            .nlas
-            .push(RouteNla::Source(addr_to_octets(src.0)));
-    }
-    if let Some(gateway) = payload.gateway {
-        req.message_mut()
-            .nlas
-            .push(RouteNla::Gateway(addr_to_octets(gateway)));
-    }
-    if let Some(dev) = payload.dev {
-        req.message_mut().nlas.push(RouteNla::Oif(dev));
-    }
-    if let Some(prefsrc) = payload.prefsrc {
-        req.message_mut()
-            .nlas
-            .push(RouteNla::PrefSource(addr_to_octets(prefsrc)));
-    }
-    if let Some(metric) = payload.metric {
-        req.message_mut().nlas.push(RouteNla::Priority(metric));
     }
     let res = match payload.family as u16 {
         AF_INET => req.v4().execute().await,
