@@ -1,4 +1,6 @@
 use crate::util::{addr_to_octets, octets_to_addr};
+use crate::Error;
+use axum::extract;
 use axum::{Extension, Json};
 use futures::stream::TryStreamExt;
 use rtnetlink::packet::AddressMessage;
@@ -71,14 +73,34 @@ impl From<AddressMessage> for Address {
     }
 }
 
-pub async fn get(Extension(handle): Extension<Handle>) -> Json<Vec<Address>> {
+pub async fn add(
+    Extension(handle): Extension<Handle>,
+    extract::Json(payload): extract::Json<Address>,
+) -> Result<(), Error> {
+    let mut req = handle
+        .address()
+        .add(payload.index, payload.address.unwrap(), payload.plen);
+    req.message_mut().header.family = payload.family;
+    req.message_mut().header.flags = payload.flags;
+    req.message_mut().header.scope = payload.scope;
+    push_nlas(&payload, &mut req.message_mut().nlas);
+    Ok(req.execute().await?)
+}
+
+pub async fn delete(
+    Extension(handle): Extension<Handle>,
+    extract::Json(payload): extract::Json<Address>,
+) -> Result<(), Error> {
+    Ok(handle.address().del(payload.into()).execute().await?)
+}
+
+pub async fn get(Extension(handle): Extension<Handle>) -> Result<Json<Vec<Address>>, Error> {
     let addresses: Vec<Address> = handle
         .address()
         .get()
         .execute()
         .map_ok(Address::from)
         .try_collect()
-        .await
-        .unwrap();
-    Json(addresses)
+        .await?;
+    Ok(Json(addresses))
 }
