@@ -1,3 +1,4 @@
+use crate::util::{addr_to_octets, octets_to_addr};
 use axum::{extract, http::StatusCode, Extension, Json};
 use futures::stream::TryStreamExt;
 use rtnetlink::packet::nlas::route::Nla;
@@ -12,41 +13,23 @@ pub struct Route {
     pub family: u8,
     pub table: u8,
     pub scope: u8,
+    pub proto: u8,
+
     pub dst: Option<(IpAddr, u8)>,
     pub src: Option<(IpAddr, u8)>,
     pub gateway: Option<IpAddr>,
     pub dev: Option<u32>,
-    pub proto: u8,
     pub prefsrc: Option<IpAddr>,
     pub metric: Option<u32>,
 }
 
-fn addr_to_octets(addr: IpAddr) -> Vec<u8> {
-    match addr {
-        IpAddr::V4(addr) => addr.octets().to_vec(),
-        IpAddr::V6(addr) => addr.octets().to_vec(),
-    }
-}
-
-fn octets_to_addr(octets: &[u8]) -> IpAddr {
-    if octets.len() == 4 {
-        let mut ary: [u8; 4] = Default::default();
-        ary.copy_from_slice(octets);
-        IpAddr::from(ary)
-    } else if octets.len() == 16 {
-        let mut ary: [u8; 16] = Default::default();
-        ary.copy_from_slice(octets);
-        IpAddr::from(ary)
-    } else {
-        unreachable!()
-    }
-}
-
 fn push_nlas(route: &Route, nlas: &mut Vec<Nla>) {
     if let Some(dst) = route.dst {
+        // WARN: also set destination_prefix_length
         nlas.push(Nla::Destination(addr_to_octets(dst.0)));
     }
     if let Some(src) = route.src {
+        // WARN: also set source_prefix_length
         nlas.push(Nla::Source(addr_to_octets(src.0)));
     }
     if let Some(gateway) = route.gateway {

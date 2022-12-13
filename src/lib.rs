@@ -7,6 +7,7 @@ use axum::{
 pub mod address;
 pub mod link;
 pub mod route;
+pub mod util;
 
 pub async fn netlink<B>(mut req: Request<B>, next: Next<B>) -> Result<Response, StatusCode> {
     if let Ok((conn, handle, _)) = rtnetlink::new_connection() {
