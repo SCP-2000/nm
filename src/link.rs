@@ -1,8 +1,5 @@
 use crate::Error;
-use axum::{
-    extract::{self, Path},
-    Extension, Json,
-};
+use axum::{extract, Extension, Json};
 use futures::stream::TryStreamExt;
 use rtnetlink::packet::nlas::link::{Info, InfoKind, Nla};
 use rtnetlink::packet::LinkMessage;
@@ -114,18 +111,15 @@ impl From<LinkMessage> for Link {
 
 pub async fn change(
     Extension(handle): Extension<Handle>,
-    Path(index): Path<u32>,
     extract::Json(payload): extract::Json<Link>,
-) -> Json<Link> {
-    let mut req = handle.link().set(index);
-    if let Some(ref _ifname) = payload.ifname {
-        // req = req.name(ifname.clone());
-    }
-    if let Some(mtu) = payload.mtu {
-        req = req.mtu(mtu);
-    }
-    req.execute().await.unwrap();
-    Json(payload)
+) -> Result<(), Error> {
+    let mut req = handle.link().set(payload.index);
+    req.message_mut().header.interface_family = payload.family;
+    req.message_mut().header.index = payload.index;
+    req.message_mut().header.link_layer_type = payload.linklayer;
+    req.message_mut().header.flags = payload.flags;
+    push_nlas(&payload, &mut req.message_mut().nlas);
+    Ok(req.execute().await?)
 }
 
 pub async fn add(

@@ -1,8 +1,4 @@
-use axum::{
-    routing::{get, put},
-    Router,
-};
-
+use axum::{routing::get, Router};
 use std::net::SocketAddr;
 
 #[tokio::main]
@@ -12,9 +8,9 @@ async fn main() -> Result<(), ()> {
             "/link",
             get(nm::link::get)
                 .delete(nm::link::delete)
-                .post(nm::link::add),
+                .post(nm::link::add)
+                .put(nm::link::change),
         )
-        .route("/links/:index", put(nm::link::change))
         .route(
             "/route",
             get(nm::route::get)
