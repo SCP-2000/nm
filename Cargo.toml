@@ -12,3 +12,4 @@ rtnetlink = "*"
 futures = "*"
 log = "*"
 thiserror = "*"
+tower-http = { version = "0.3.5", features = ["cors"] }
