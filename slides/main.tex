@@ -1,0 +1,77 @@
+\documentclass{ctexbeamer}
+\usepackage{changepage}
+\usetheme{Berkeley}
+\title{nm}
+\date{2022年12月19日}
+
+\begin{document}
+
+\frame{\titlepage}
+
+\section{背景}
+\begin{frame}
+\frametitle{网络配置}
+\begin{block}{网络配置包含什么}
+\begin{itemize}
+\item 接口
+\item 地址
+\item 路由
+\item DNS
+\end{itemize}
+\end{block}
+\begin{exampleblock}{配置方式}
+\begin{itemize}
+\item 写文件（例如\texttt{/etc/resolv.conf}）
+\item iproute2
+\item NetworkManager, systemd-networkd, ...
+\end{itemize}
+\end{exampleblock}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{iproute2}
+\begin{verbatim}
+Usage: ip [ OPTIONS ] OBJECT { COMMAND | help }
+where  OBJECT := { address | addrlabel | amt | fou
+                 | help | ila | ioam | l2tp | link
+                 | macsec | maddress | monitor
+                 | mptcp | mroute | mrule
+                 | neighbor | neighbour | netconf
+                 | netns | nexthop | ntable | ntbl
+                 | route | rule | sr | tap
+                 | tcpmetrics | token | tunnel
+                 | tuntap | vrf | xfrm }
+\end{verbatim}
+\begin{alertblock}{netlink}
+iproute2可以管理的资源很多，但其本质通过的是内核提供的netlink接口，与修改文件等配置有本质的不同
+\end{alertblock}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{netlink}
+\begin{quotation}
+  Netlink is used to transfer information between the kernel and
+  user-space processes. It consists of a standard sockets-based
+  interface for user space processes and an internal kernel API for
+  kernel modules.
+
+  netlink\_family selects the kernel module or netlink group to
+  communicate with. The currently assigned netlink families are:
+
+  \begin{adjustwidth}{0.5cm}{}
+    NETLINK\_ROUTE
+  \end{adjustwidth}
+
+  \begin{adjustwidth}{1cm}{}
+    Receives routing and link updates and may be used to
+    modify the routing tables (both IPv4 and IPv6), IP
+    addresses, link parameters, neighbor setups, queueing
+    disciplines, traffic classes, and packet classifiers (see
+    rtnetlink(7)).
+  \end{adjustwidth}
+
+  \ldots
+\end{quotation}
+\end{frame}
+
+\end{document}
