@@ -74,4 +74,21 @@ iproute2可以管理的资源很多，但其本质通过的是内核提供的net
 \end{quotation}
 \end{frame}
 
+\section{实现}
+\begin{frame}
+\frametitle{后端}
+\begin{exampleblock}{Rust}
+高效，可靠，易于编写与操作系统直接交互的代码
+\end{exampleblock}
+\begin{exampleblock}{rtnetlink \url{https://crates.io/crates/rtnetlink}}
+NETLINK\_ROUTE协议的高层抽象
+\end{exampleblock}
+\begin{exampleblock}{axum \url{https://crates.io/crates/axum}}
+基于tokio的web框架，模块化设计，十分易用
+\end{exampleblock}
+\begin{block}{接口}
+基于JSON的类restful接口，提供增删改查功能  
+\end{block}
+\end{frame}
+
 \end{document}
