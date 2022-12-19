@@ -108,7 +108,6 @@ function App() {
   const [routes, updateRoutes] = useTriggeredFetch<Route[]>("/route");
 
   const [showAddAddress, setShowAddAddress] = useState(false);
-  const [showAddLink, setShowAddLink] = useState(false);
   const [showAddRoute, setShowAddRoute] = useState(false);
 
   const [tab, setTab] = useState<Tab>("Address");
@@ -159,7 +158,6 @@ function App() {
   </main>;
 
   const linkMain = <main>
-    <button onClick={() => setShowAddLink(true)}>Add</button>
     {(
       links.map(
         (link, idx) =>
