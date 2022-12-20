@@ -13,3 +13,4 @@ futures = "*"
 log = "*"
 thiserror = "*"
 tower-http = { version = "0.3.5", features = ["cors"] }
+surge-ping = "0.7.3"

@@ -10,11 +10,13 @@ use rtnetlink::packet::{LinkMessage, IFF_BROADCAST, IFF_LOWER_UP, IFF_MULTICAST,
 use rtnetlink::Handle;
 use serde::{Deserialize, Serialize};
 use std::net::{SocketAddr, ToSocketAddrs};
+use std::time::Duration;
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Check {
     link: Option<Link>,
     addr: Option<Vec<Address>>,
+    ping: Option<Duration>,
     dns: bool,
 }
 
@@ -50,6 +52,15 @@ pub async fn check(Extension(handle): Extension<Handle>) -> Result<Json<Check>, 
     } else {
         None
     };
+    let ping = match surge_ping::ping("101.6.6.6".parse().unwrap(), b"hello").await {
+        Ok((_, duration)) => Some(duration),
+        _ => None,
+    };
     let dns: bool = "example.com:443".to_socket_addrs().is_ok();
-    Ok(Json(Check { link, addr, dns }))
+    Ok(Json(Check {
+        link,
+        addr,
+        dns,
+        ping,
+    }))
 }
