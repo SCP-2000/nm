@@ -6,6 +6,7 @@ use axum::{
 use thiserror::Error;
 
 pub mod address;
+pub mod check;
 pub mod link;
 pub mod route;
 pub mod util;

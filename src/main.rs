@@ -24,6 +24,7 @@ async fn main() -> Result<(), ()> {
                 .delete(nm::address::delete)
                 .post(nm::address::add),
         )
+        .route("/check", get(nm::check::check))
         .route_layer(axum::middleware::from_fn(nm::netlink))
         .layer(CorsLayer::very_permissive());
 
