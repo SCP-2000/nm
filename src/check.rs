@@ -9,11 +9,13 @@ use rtnetlink::packet::nlas::link::{Info, InfoKind, Nla};
 use rtnetlink::packet::{LinkMessage, IFF_BROADCAST, IFF_LOWER_UP, IFF_MULTICAST, IFF_UP};
 use rtnetlink::Handle;
 use serde::{Deserialize, Serialize};
+use std::net::{SocketAddr, ToSocketAddrs};
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Check {
     link: Option<Link>,
     addr: Option<Vec<Address>>,
+    dns: bool,
 }
 
 pub async fn check(Extension(handle): Extension<Handle>) -> Result<Json<Check>, Error> {
@@ -48,5 +50,6 @@ pub async fn check(Extension(handle): Extension<Handle>) -> Result<Json<Check>, 
     } else {
         None
     };
-    Ok(Json(Check { link, addr }))
+    let dns: bool = "example.com:443".to_socket_addrs().is_ok();
+    Ok(Json(Check { link, addr, dns }))
 }
