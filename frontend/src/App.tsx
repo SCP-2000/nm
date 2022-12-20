@@ -7,7 +7,7 @@ import clsx from 'clsx';
 import './style.scss';
 import { link } from 'fs';
 
-type Tab = 'Address' | 'Link' | 'Route';
+type Tab = 'Home' | 'Address' | 'Link' | 'Route';
 
 function TabHandle({ self, cur, setTab }: { self: Tab, cur: Tab, setTab: (t: Tab) => void }): JSX.Element {
   return <div
@@ -63,6 +63,13 @@ type Route = {
   metric: number | null;
 }
 
+type Check = {
+  link: Link | null,
+  addr: Address[] | null,
+  ping: { secs: number, nanos: number } | null,
+  dns: boolean,
+}
+
 function Attr({ name, value }: { name: string, value?: null | string | number }): JSX.Element | null {
   if(value === null || value === undefined || value === '') return null;
 
@@ -85,6 +92,14 @@ function formatScope(scope: number): string {
   return `Other(${scope})`;
 }
 
+function formatDuration({ secs, nanos }: { secs: number, nanos: number }): string {
+  const usAll = Math.round(nanos / 1000);
+  const ms = Math.floor(usAll / 1000);
+  const us = usAll - ms * 1000;
+  const usStr = us.toString().padStart(4, '0');
+  return `${secs * 1000 + ms}.${usStr}ms`;
+}
+
 function fuckItGetInput(name: string): string {
   return document.querySelector<HTMLInputElement | HTMLSelectElement>(`input[name=${name}], select[name=${name}]`)!.value;
 }
@@ -103,22 +118,40 @@ function exitDialog(setter: (shown: boolean) => void): (e: React.MouseEvent) => 
 }
 
 function App() {
-  const [addresses, updateAddresses] = useTriggeredFetch<Address[]>("/address");
-  const [links, updateLinks] = useTriggeredFetch<Link[]>("/link");
-  const [routes, updateRoutes] = useTriggeredFetch<Route[]>("/route");
+  const [addresses, updateAddresses] = useTriggeredFetch<Address[]>('/address');
+  const [links, updateLinks] = useTriggeredFetch<Link[]>('/link');
+  const [routes, updateRoutes] = useTriggeredFetch<Route[]>('/route');
+  const [check, updateCheck] = useTriggeredFetch<Check>('/check');
 
   const [showAddAddress, setShowAddAddress] = useState(false);
   const [showAddRoute, setShowAddRoute] = useState(false);
 
-  const [tab, setTab] = useState<Tab>("Address");
+  const [tab, setTab] = useState<Tab>('Home');
 
   const updateAll = useCallback(() => {
     updateAddresses();
     updateLinks();
     updateRoutes();
-  }, [updateAddresses, updateLinks, updateRoutes]);
+    updateCheck();
+  }, [updateAddresses, updateLinks, updateRoutes, updateCheck]);
 
-  if(links === null || addresses === null || routes === null) return null;
+  const header = <header>
+    <nav>
+      <TabHandle self="Home" cur={tab} setTab={setTab} />
+      <TabHandle self="Address" cur={tab} setTab={setTab} />
+      <TabHandle self="Link" cur={tab} setTab={setTab} />
+      <TabHandle self="Route" cur={tab} setTab={setTab} />
+      <div className="spanner" />
+      <button onClick={updateAll}>Refresh</button>
+    </nav>
+  </header>;
+
+  if(links === null || addresses === null || routes === null) return <>
+    { header }
+    <main className="loading">
+      <div className="loading-inner">Loading</div>
+    </main>
+  </>;
 
   function findLinkName(index: number): string | null {
     return links?.find(e => e.index === index)?.ifname ?? null;
@@ -229,21 +262,41 @@ function App() {
       )
     )}
   </main>;
+  
+  const homeMain = <main>
+    <div className="heading">Status</div>
+    {
+      check === null ? 'Loading...' : <>
+        <div className={clsx('check', { ok: check.link !== null })}>
+          <div className="check-name">External Network Link</div>
+          <strong>{ check.link !== null ? `Up (${check.link.ifname}(${check.link.index}))` : 'Absent' }</strong>
+        </div>
+        <div className={clsx('check', { ok: check.addr !== null && check.addr.length > 0 })}>
+          <div className="check-name">IP Address</div>
+          <strong>{ (check.addr !== null && check.addr.length > 0) ? `Up (${check.addr[0].address}/${check.addr[0].plen} on ${findLinkName(check.addr[0].index)})${
+            check.addr.length == 1 ? '' : ` (+${check.addr.length - 1})`
+          }` : 'Absent' }</strong>
+        </div>
+        <div className={clsx('check', { ok: check.ping !== null })}>
+          <div className="check-name">Internet connection (to DNS666)</div>
+          <strong>{ check.ping !== null ? `Yes (${formatDuration(check.ping)})` : 'Inoperative' }</strong>
+        </div>
+        <div className={clsx('check', { ok: check.dns })}>
+          <div className="check-name">DNS</div>
+          <strong>{ check.dns ? 'Configured' : 'Not configured' }</strong>
+        </div>
+      </>
+    }
+  </main>;
 
   return <>
-    <header>
-      <nav>
-        <TabHandle self="Address" cur={tab} setTab={setTab} />
-        <TabHandle self="Link" cur={tab} setTab={setTab} />
-        <TabHandle self="Route" cur={tab} setTab={setTab} />
-      </nav>
-      {
-        tab === 'Address' ? addressMain
-        : tab === 'Link' ? linkMain
-        : routeMain
-      }
-    </header>
-
+    { header }
+    {
+      tab === 'Home' ? homeMain
+        : tab === 'Address' ? addressMain
+          : tab === 'Link' ? linkMain
+            : routeMain
+    }
     <div className={clsx("backdrop", { shown: showAddRoute })} onClick={exitDialog(setShowAddRoute)}>
       <div className="dialog">
         <div className="dialog-title">Add route</div>

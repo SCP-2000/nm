@@ -39,6 +39,7 @@ nav {
   height: 80px;
 
   z-index: 10;
+  align-items: center;
 }
 
 .tab {
@@ -225,4 +226,36 @@ select, input {
   display: block;
   margin-top: 20px;
   margin-bottom: 5px;
+}
+
+.spanner {
+  flex: 1;
+}
+
+.heading {
+  font-size: 36px;
+  font-weight: bold;
+}
+
+.check {
+  margin-top: 10px;
+  padding: 15px 20px;
+  border-left: 10px solid rgb(20, 255, 20);
+  &:not(.ok) {
+    color: rgba(255, 100, 100);
+    border-left-color: rgb(255, 20, 20);
+  }
+  background: #333;
+
+  strong {
+    @include monospace;
+  }
+
+  .check-name {
+    color: white;
+    font-size: 12px;
+    opacity: .54;
+    display: block;
+    margin-bottom: 5px;
+  }
 }
